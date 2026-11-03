@@ -1,4 +1,3 @@
-
 (() => {
 "use strict";
 
@@ -12,12 +11,11 @@ window.__verroStorefrontInitialized = true;
 const SUPABASE_URL = "https://slkuvuygbmltldgnacnj.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Nh6muXD3DzdyZhz4Or31VQ_uWRPrHc2";
 const ADMIN_EMAIL = "abdullahbinkhalil79@gmail.com";
-const ADMIN_WHATSAPP = "01790682661";
+const ADMIN_WHATSAPP = "01604711009";
 const BUCKET = "product-images";
 
 const db = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
 const $ = id => document.getElementById(id);
-
 const money = n => "৳" + Number(n || 0).toLocaleString("en-BD");
 
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
@@ -37,7 +35,7 @@ if (!db) {
 }
 
 // =====================================
-// GENERAL HELPERS
+// HELPERS
 // =====================================
 
 function message(id, text, error = false) {
@@ -48,8 +46,8 @@ function message(id, text, error = false) {
 }
 
 function makeId() {
-  return crypto.randomUUID
-    ? crypto.randomUUID()
+  return window.crypto?.randomUUID
+    ? window.crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
@@ -71,13 +69,7 @@ function getSessionId() {
 }
 
 async function trackEvent(eventType) {
-  const allowed = [
-    "page_view",
-    "product_view",
-    "add_to_cart",
-    "checkout_start"
-  ];
-
+  const allowed = ["page_view", "product_view", "add_to_cart", "checkout_start"];
   if (!allowed.includes(eventType)) return;
 
   try {
@@ -87,8 +79,7 @@ async function trackEvent(eventType) {
       page_path: location.pathname,
       session_id: getSessionId()
     });
-
-    if (error) console.warn("Analytics event failed:", error.message);
+    if (error) console.warn("Analytics:", error.message);
   } catch (err) {
     console.warn("Analytics unavailable:", err);
   }
@@ -113,33 +104,28 @@ function saveCart() {
   try {
     localStorage.setItem("verroCart", JSON.stringify(cart));
   } catch (err) {
-    console.warn("Cart could not be saved:", err);
+    console.warn("Cart save failed:", err);
   }
 }
 
 // =====================================
-// PRODUCT CATEGORIES
+// CATEGORIES
 // =====================================
 
 function renderCategories() {
   const list = $("categoryList");
   if (!list) return;
 
-  const cats = [
-    ...new Set(
-      products.filter(p => p.active)
-        .map(p => p.category)
-        .filter(Boolean)
-    )
-  ].sort();
+  const cats = [...new Set(
+    products.filter(p => p.active)
+      .map(p => p.category)
+      .filter(Boolean)
+  )].sort();
 
-  if (category !== "All" && !cats.includes(category)) {
-    category = "All";
-  }
+  if (category !== "All" && !cats.includes(category)) category = "All";
 
   list.innerHTML =
-    `<button class="category ${category === "All" ? "active" : ""}"
-      data-category="All">All products</button>` +
+    `<button class="category ${category === "All" ? "active" : ""}" data-category="All">All products</button>` +
     cats.map(c => `
       <button class="category ${category === c ? "active" : ""}"
         data-category="${esc(c)}">${esc(c)}</button>
@@ -147,7 +133,7 @@ function renderCategories() {
 }
 
 // =====================================
-// PRODUCT DISPLAY
+// PRODUCTS
 // =====================================
 
 function renderProducts() {
@@ -163,34 +149,27 @@ function renderProducts() {
     )
   );
 
-  grid.innerHTML = rows.length
-    ? rows.map(p => `
-      <article class="product-card" data-view="${p.id}">
-        <img class="product-image"
-          src="${esc(p.image_url || "https://placehold.co/700x500?text=VERRO")}"
-          alt="${esc(p.name)}" loading="lazy">
-        <div class="product-info">
-          <p class="product-category">${esc(p.category)}</p>
-          <h3>${esc(p.name)}</h3>
-          <p>${esc(p.description || "")}</p>
-          <p class="product-price">${money(p.price)}</p>
-          <button class="add-to-cart" data-add="${p.id}"
-            ${p.stock < 1 ? "disabled" : ""}>
-            ${p.stock < 1 ? "OUT OF STOCK" : "ADD TO BAG +"}
-          </button>
-        </div>
-      </article>
-    `).join("")
-    : '<p class="loading-message">No products found.</p>';
+  grid.innerHTML = rows.length ? rows.map(p => `
+    <article class="product-card" data-view="${p.id}">
+      <img class="product-image"
+        src="${esc(p.image_url || "https://placehold.co/700x500?text=VERRO")}"
+        alt="${esc(p.name)}" loading="lazy">
+      <div class="product-info">
+        <p class="product-category">${esc(p.category)}</p>
+        <h3>${esc(p.name)}</h3>
+        <p>${esc(p.description || "")}</p>
+        <p class="product-price">${money(p.price)}</p>
+        <button class="add-to-cart" data-add="${p.id}"
+          ${p.stock < 1 ? "disabled" : ""}>
+          ${p.stock < 1 ? "OUT OF STOCK" : "ADD TO BAG +"}
+        </button>
+      </div>
+    </article>
+  `).join("") : '<p class="loading-message">No products found.</p>';
 }
-
-// =====================================
-// LOAD PRODUCTS
-// =====================================
 
 async function loadProducts() {
   const grid = $("productGrid");
-
   if (grid) grid.textContent = "Loading products…";
 
   const { data, error } = await db
@@ -208,16 +187,12 @@ async function loadProducts() {
 
   cart = cart.reduce((result, item) => {
     const p = products.find(x => Number(x.id) === Number(item.id));
-
     if (!p || !p.active || Number(p.stock) < 1) return result;
 
-    const quantity = Math.min(
-      10,
-      Number(p.stock),
-      Math.max(1, Number(item.quantity) || 1)
-    );
-
-    result.push({ ...p, quantity });
+    result.push({
+      ...p,
+      quantity: Math.min(10, Number(p.stock), Math.max(1, Number(item.quantity) || 1))
+    });
     return result;
   }, []);
 
@@ -225,49 +200,51 @@ async function loadProducts() {
   renderCategories();
   renderProducts();
   renderCart();
-
   return true;
 }
 
 // =====================================
-// SHOPPING CART
+// CART
 // =====================================
 
 function renderCart() {
-  $("cartCount").textContent =
-    cart.reduce((n, x) => n + Number(x.quantity), 0);
+  const count = $("cartCount");
+  const total = $("cartTotal");
+  const items = $("cartItems");
 
-  $("cartTotal").textContent = money(
+  if (!count || !total || !items) return;
+
+  count.textContent = cart.reduce((n, x) => n + Number(x.quantity), 0);
+
+  total.textContent = money(
     cart.reduce((n, x) => n + Number(x.price) * x.quantity, 0)
   );
 
-  $("cartItems").innerHTML = cart.length
-    ? cart.map(x => `
-      <div class="cart-product">
-        <div>
-          <strong>${esc(x.name)}</strong>
-          <p>${money(x.price)} × ${x.quantity}</p>
-        </div>
-        <div class="cart-controls">
-          <button data-q="${x.id}" data-d="-1">−</button>
-          <span>${x.quantity}</span>
-          <button data-q="${x.id}" data-d="1"
-            ${x.quantity >= Math.min(10, x.stock) ? "disabled" : ""}>+</button>
-          <button data-r="${x.id}">Remove</button>
-        </div>
+  items.innerHTML = cart.length ? cart.map(x => `
+    <div class="cart-product">
+      <div>
+        <strong>${esc(x.name)}</strong>
+        <p>${money(x.price)} × ${x.quantity}</p>
       </div>
-    `).join("")
-    : "<p>Your shopping bag is empty.</p>";
+      <div class="cart-controls">
+        <button data-q="${x.id}" data-d="-1">−</button>
+        <span>${x.quantity}</span>
+        <button data-q="${x.id}" data-d="1"
+          ${x.quantity >= Math.min(10, x.stock) ? "disabled" : ""}>+</button>
+        <button data-r="${x.id}">Remove</button>
+      </div>
+    </div>
+  `).join("") : "<p>Your shopping bag is empty.</p>";
 }
 
 function openCart() {
-  $("cartDrawer").classList.add("show");
-  $("cartOverlay").classList.add("show");
+  $("cartDrawer")?.classList.add("show");
+  $("cartOverlay")?.classList.add("show");
 }
 
 function closeCart() {
-  $("cartDrawer").classList.remove("show");
-  $("cartOverlay").classList.remove("show");
+  $("cartDrawer")?.classList.remove("show");
+  $("cartOverlay")?.classList.remove("show");
 }
 
 // =====================================
@@ -278,10 +255,7 @@ $("productGrid").addEventListener("click", e => {
   const card = e.target.closest("[data-view]");
   const button = e.target.closest("[data-add]");
 
-  if (card && !button) {
-    trackEvent("product_view");
-  }
-
+  if (card && !button) trackEvent("product_view");
   if (!button) return;
 
   const p = products.find(x => Number(x.id) === Number(button.dataset.add));
@@ -309,7 +283,6 @@ $("productGrid").addEventListener("click", e => {
 $("categoryList").addEventListener("click", e => {
   const b = e.target.closest("[data-category]");
   if (!b) return;
-
   category = b.dataset.category;
   renderCategories();
   renderProducts();
@@ -343,7 +316,6 @@ $("cartItems").addEventListener("click", e => {
 
     if (x && p) {
       const next = x.quantity + Number(q.dataset.d);
-
       if (next < 1) {
         cart = cart.filter(i => i.id !== x.id);
       } else {
@@ -352,20 +324,21 @@ $("cartItems").addEventListener("click", e => {
     }
   }
 
-  if (r) {
-    cart = cart.filter(i => Number(i.id) !== Number(r.dataset.r));
-  }
+  if (r) cart = cart.filter(i => Number(i.id) !== Number(r.dataset.r));
 
   saveCart();
   renderCart();
 });
 
 // =====================================
-// COD CHECKOUT
+// COD CHECKOUT — FIXED
 // =====================================
 
 $("checkoutForm").addEventListener("submit", async e => {
   e.preventDefault();
+
+  // Keep form reference before asynchronous operations
+  const form = e.currentTarget;
 
   message("checkoutMessage", "");
   $("whatsappNotice").hidden = true;
@@ -377,7 +350,7 @@ $("checkoutForm").addEventListener("submit", async e => {
 
   trackEvent("checkout_start");
 
-  const fd = new FormData(e.currentTarget);
+  const fd = new FormData(form);
   const id = makeId();
 
   const order = {
@@ -385,21 +358,14 @@ $("checkoutForm").addEventListener("submit", async e => {
     customer_name: String(fd.get("customerName") || "").trim(),
     phone: String(fd.get("phone") || "").trim(),
     address: String(fd.get("address") || "").trim(),
-
-    // Database requires exactly COD
     payment_method: "COD",
-
     items: cart.map(x => ({
       id: Number(x.id),
       name: x.name,
       price: Number(x.price),
       quantity: Number(x.quantity)
     })),
-
-    total: cart.reduce(
-      (n, x) => n + Number(x.price) * x.quantity, 0
-    ),
-
+    total: cart.reduce((n, x) => n + Number(x.price) * x.quantity, 0),
     status: "pending"
   };
 
@@ -423,25 +389,23 @@ $("checkoutForm").addEventListener("submit", async e => {
     for (const item of order.items) {
       const p = (latest || []).find(x => Number(x.id) === item.id);
 
-      if (
-        !p ||
-        !p.active ||
-        Number(p.price) !== item.price ||
-        Number(p.stock) < item.quantity
-      ) {
-        throw Error(
-          "A product price or stock changed. Please refresh your bag."
-        );
+      if (!p || !p.active ||
+          Number(p.price) !== item.price ||
+          Number(p.stock) < item.quantity) {
+        throw Error("A product price or stock changed. Please refresh your bag.");
       }
     }
 
     const { error } = await db.from("orders").insert(order);
     if (error) throw error;
 
+    // Clear cart only after successful order insertion
     cart = [];
     saveCart();
     renderCart();
-    e.currentTarget.reset();
+
+    // Fixed: reset saved form reference
+    form.reset();
 
     const ref = id.slice(0, 8).toUpperCase();
 
@@ -450,7 +414,7 @@ $("checkoutForm").addEventListener("submit", async e => {
       `Order received! Reference: ${ref}. We will contact you to confirm.`
     );
 
-    const text = [
+    const whatsappText = [
       `New VÉRRO COD order ${ref}`,
       `Customer: ${order.customer_name}`,
       `Phone: ${order.phone}`,
@@ -464,7 +428,7 @@ $("checkoutForm").addEventListener("submit", async e => {
     const wa = ADMIN_WHATSAPP.replace(/\D/g, "").replace(/^0/, "88");
 
     $("whatsappNotice").href =
-      `https://wa.me/${wa}?text=${encodeURIComponent(text)}`;
+      `https://wa.me/${wa}?text=${encodeURIComponent(whatsappText)}`;
 
     $("whatsappNotice").hidden = false;
 
@@ -492,105 +456,49 @@ function injectAdminStyles() {
 
   const s = document.createElement("style");
   s.id = "verroAdminStyles";
-
   s.textContent = `
     #adminSection {
-      background:#11110f;
-      color:#f4f1e9;
-      padding:55px 7%;
+      background:#11110f;color:#f4f1e9;padding:55px 7%;
     }
-    #adminSection h2,#adminSection h3 { color:#f4f1e9; }
+    #adminSection h2,#adminSection h3 {color:#f4f1e9;}
     .va-stats,.va-formgrid {
-      display:grid;
-      grid-template-columns:repeat(4,minmax(0,1fr));
-      gap:12px;
-      margin:20px 0;
+      display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;margin:20px 0;
     }
     .va-card,.va-panel {
-      background:#1c1c19;
-      border:1px solid #393831;
-      padding:17px;
+      background:#1c1c19;border:1px solid #393831;padding:17px;
     }
-    .va-card span {
-      display:block;
-      color:#aaa;
-      font-size:11px;
-    }
-    .va-card strong {
-      display:block;
-      color:#d2b98b;
-      font-size:23px;
-      margin-top:8px;
-    }
-    .va-tabs {
-      display:flex;
-      gap:8px;
-      flex-wrap:wrap;
-      margin:24px 0;
-    }
+    .va-card span {display:block;color:#aaa;font-size:11px;}
+    .va-card strong {display:block;color:#d2b98b;font-size:23px;margin-top:8px;}
+    .va-tabs {display:flex;gap:8px;flex-wrap:wrap;margin:24px 0;}
     .va-tabs button,.va-btn {
-      padding:10px 13px;
-      border:1px solid #625b4d;
-      background:transparent;
-      color:#eee;
-      font-size:12px;
-      cursor:pointer;
+      padding:10px 13px;border:1px solid #625b4d;
+      background:transparent;color:#eee;font-size:12px;cursor:pointer;
     }
-    .va-tabs button.active,.va-btn.primary {
-      background:#c0a477;
-      color:#171714;
-    }
-    .va-panel { margin:12px 0; }
-    .va-formgrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .va-formgrid label {
-      display:grid;
-      gap:6px;
-      font-size:12px;
-      color:#ddd;
-    }
+    .va-tabs button.active,.va-btn.primary {background:#c0a477;color:#171714;}
+    .va-panel {margin:12px 0;}
+    .va-formgrid {grid-template-columns:repeat(2,minmax(0,1fr));}
+    .va-formgrid label {display:grid;gap:6px;font-size:12px;color:#ddd;}
     .va-formgrid input,.va-formgrid textarea {
-      padding:10px;
-      background:#10100e;
-      color:#fff;
-      border:1px solid #555;
+      padding:10px;background:#10100e;color:#fff;border:1px solid #555;
     }
-    .va-wide { grid-column:1/-1; }
-    .va-tablewrap { overflow:auto; }
-    .va-table {
-      border-collapse:collapse;
-      width:100%;
-      min-width:620px;
-      font-size:12px;
-    }
-    .va-table td,.va-table th {
-      padding:11px;
-      border-bottom:1px solid #444;
-      text-align:left;
-    }
-    .va-table th { color:#c9b58e; }
-    .va-actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .va-order,.va-review {
-      padding:15px;
-      border:1px solid #444;
-      margin:12px 0;
-      font-size:13px;
-    }
-    .va-order p,.va-review p { margin:7px 0; color:#ccc; }
-    .va-order select {
-      padding:8px;
-      background:#111;
-      color:white;
-      border:1px solid #555;
-    }
-    .va-muted { color:#aaa; font-size:12px; }
+    .va-wide {grid-column:1/-1;}
+    .va-tablewrap {overflow:auto;}
+    .va-table {border-collapse:collapse;width:100%;min-width:620px;font-size:12px;}
+    .va-table td,.va-table th {padding:11px;border-bottom:1px solid #444;text-align:left;}
+    .va-table th {color:#c9b58e;}
+    .va-actions {display:flex;gap:8px;flex-wrap:wrap;}
+    .va-order,.va-review {padding:15px;border:1px solid #444;margin:12px 0;font-size:13px;}
+    .va-order p,.va-review p {margin:7px 0;color:#ccc;}
+    .va-order select {padding:8px;background:#111;color:white;border:1px solid #555;}
+    .va-muted {color:#aaa;font-size:12px;}
     @media(max-width:650px) {
-      .va-stats { grid-template-columns:repeat(2,1fr); }
-      .va-formgrid { grid-template-columns:1fr; }
-      .va-wide { grid-column:auto; }
-      #adminSection { padding:35px 5%; }
+      .va-stats {grid-template-columns:repeat(2,1fr);}
+      .va-formgrid {grid-template-columns:1fr;}
+      .va-wide {grid-column:auto;}
+      #adminSection {padding:35px 5%;}
     }
   `;
-
   document.head.appendChild(s);
 }
 
@@ -630,27 +538,13 @@ function buildAdmin() {
 
       <form id="vaProductForm" class="va-formgrid">
         <input type="hidden" name="id">
-        <label>Product name
-          <input name="name" required maxlength="150">
-        </label>
-        <label>Category
-          <input name="category" required maxlength="80">
-        </label>
-        <label>Price (BDT)
-          <input name="price" type="number" min="1" step="1" required>
-        </label>
-        <label>Stock quantity
-          <input name="stock" type="number" min="0" step="1" value="0" required>
-        </label>
-        <label class="va-wide">Description
-          <textarea name="description" rows="3"></textarea>
-        </label>
-        <label class="va-wide">Product image
-          <input name="image" type="file" accept="image/*">
-        </label>
-        <label class="va-wide">
-          <span><input name="active" type="checkbox" checked> Publish product</span>
-        </label>
+        <label>Product name<input name="name" required maxlength="150"></label>
+        <label>Category<input name="category" required maxlength="80"></label>
+        <label>Price (BDT)<input name="price" type="number" min="1" step="1" required></label>
+        <label>Stock quantity<input name="stock" type="number" min="0" step="1" value="0" required></label>
+        <label class="va-wide">Description<textarea name="description" rows="3"></textarea></label>
+        <label class="va-wide">Product image<input name="image" type="file" accept="image/*"></label>
+        <label class="va-wide"><span><input name="active" type="checkbox" checked> Publish product</span></label>
         <div class="va-wide va-actions">
           <button class="va-btn primary" type="submit">Save product</button>
           <button class="va-btn" type="button" id="vaClear">Clear</button>
@@ -660,12 +554,7 @@ function buildAdmin() {
 
       <div class="va-tablewrap">
         <table class="va-table">
-          <thead>
-            <tr>
-              <th>Product</th><th>Price</th><th>Stock</th>
-              <th>Status</th><th>Actions</th>
-            </tr>
-          </thead>
+          <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="vaProductRows"></tbody>
         </table>
       </div>
@@ -683,9 +572,7 @@ function buildAdmin() {
       <h3>Customers</h3>
       <div class="va-tablewrap">
         <table class="va-table">
-          <thead>
-            <tr><th>Name</th><th>Phone</th><th>Orders</th><th>Order value</th></tr>
-          </thead>
+          <thead><tr><th>Name</th><th>Phone</th><th>Orders</th><th>Order value</th></tr></thead>
           <tbody id="vaCustomerRows"></tbody>
         </table>
       </div>
@@ -694,9 +581,7 @@ function buildAdmin() {
     <section class="va-panel" id="vaAnalytics" hidden>
       <h3>Website events</h3>
       <div class="va-stats" id="vaAnalyticsRows"></div>
-      <p class="va-muted">
-        Facebook/Instagram Ads metrics require a separate authorized Meta API connection.
-      </p>
+      <p class="va-muted">Facebook/Instagram Ads metrics require a separate authorized Meta API connection.</p>
     </section>
   `;
 
@@ -716,11 +601,9 @@ function buildAdmin() {
       document.querySelectorAll(".va-tabs button")
         .forEach(x => x.classList.toggle("active", x === b));
 
-      ["products", "orders", "reviews", "customers", "analytics"]
-        .forEach(k => {
-          $("va" + k[0].toUpperCase() + k.slice(1)).hidden =
-            k !== b.dataset.tab;
-        });
+      ["products", "orders", "reviews", "customers", "analytics"].forEach(k => {
+        $("va" + k[0].toUpperCase() + k.slice(1)).hidden = k !== b.dataset.tab;
+      });
     };
   });
 
@@ -737,6 +620,7 @@ function buildAdmin() {
 
 function resetProductForm() {
   const f = $("vaProductForm");
+  if (!f) return;
   f.reset();
   f.elements.id.value = "";
   f.elements.active.checked = true;
@@ -750,12 +634,10 @@ async function renderProductTable() {
       <td>${money(p.price)}</td>
       <td>${p.stock}</td>
       <td>${p.active ? "Active" : "Hidden"}</td>
-      <td>
-        <div class="va-actions">
-          <button class="va-btn" data-edit="${p.id}">Edit</button>
-          <button class="va-btn" data-delete="${p.id}">Delete</button>
-        </div>
-      </td>
+      <td><div class="va-actions">
+        <button class="va-btn" data-edit="${p.id}">Edit</button>
+        <button class="va-btn" data-delete="${p.id}">Delete</button>
+      </div></td>
     </tr>
   `).join("") || '<tr><td colspan="5">No products added yet.</td></tr>';
 }
@@ -773,10 +655,8 @@ async function saveProduct(e) {
   const price = Number(fd.get("price"));
   const stock = Number(fd.get("stock"));
 
-  if (
-    !Number.isInteger(price) || price <= 0 ||
-    !Number.isInteger(stock) || stock < 0
-  ) {
+  if (!Number.isInteger(price) || price <= 0 ||
+      !Number.isInteger(stock) || stock < 0) {
     message("vaProductMsg", "Enter a valid price and stock quantity.", true);
     return;
   }
@@ -801,12 +681,10 @@ async function saveProduct(e) {
 
       const path = `${makeId()}.${ext}`;
 
-      const { error: upErr } = await db.storage
-        .from(BUCKET)
+      const { error: upErr } = await db.storage.from(BUCKET)
         .upload(path, file, { contentType: file.type });
 
       if (upErr) throw upErr;
-
       image_url = db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
     }
 
@@ -830,8 +708,8 @@ async function saveProduct(e) {
     resetProductForm();
     await loadProducts();
     await renderProductTable();
-
     message("vaMessage", id ? "Product updated." : "Product added.");
+
   } catch (err) {
     console.error(err);
     message("vaProductMsg", err.message || "Save failed.", true);
@@ -852,7 +730,7 @@ async function productAction(e) {
   if (edit) {
     const p = products.find(x => Number(x.id) === Number(edit.dataset.edit));
     const f = $("vaProductForm");
-    if (!p) return;
+    if (!p || !f) return;
 
     f.elements.id.value = p.id;
     f.elements.name.value = p.name;
@@ -882,7 +760,7 @@ async function productAction(e) {
 }
 
 // =====================================
-// ADMIN DASHBOARD DATA
+// ADMIN DATA — ORDERS INCLUDED
 // =====================================
 
 async function loadAdminData() {
@@ -897,7 +775,7 @@ async function loadAdminData() {
   const errors = [ord, rev, events].filter(x => x.error);
 
   if (errors.length) {
-    console.error("Admin dashboard query errors:", errors.map(x => x.error));
+    console.error("Dashboard errors:", errors.map(x => x.error));
     message(
       "vaMessage",
       "Some dashboard data could not load: " +
@@ -919,7 +797,6 @@ async function loadAdminData() {
       count: 0,
       total: 0
     };
-
     c.count++;
     c.total += Number(o.total);
     customers.set(key, c);
@@ -930,16 +807,15 @@ async function loadAdminData() {
     ["Total orders", adminOrders.length],
     ["Delivered orders", delivered.length],
     ["Customers", customers.size]
-  ].map(x => `
-    <div class="va-card"><span>${x[0]}</span><strong>${x[1]}</strong></div>
-  `).join("");
+  ].map(x => `<div class="va-card"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join("");
 
   $("vaOrderRows").innerHTML = adminOrders.map(o => `
     <article class="va-order">
       <strong>Order ${esc(String(o.id).slice(0, 8).toUpperCase())} · ${money(o.total)}</strong>
       <p>${esc(o.customer_name)} · ${esc(o.phone)}</p>
       <p>${esc(o.address)}</p>
-      <p>${(o.items || []).map(i => `${esc(i.name)} × ${i.quantity}`).join(", ")}</p>
+      <p>${(o.items || []).map(i => `${esc(i.name)} × ${i.quantity} — ${money(i.price * i.quantity)}`).join("<br>")}</p>
+      <p>Payment: ${esc(o.payment_method || "COD")}</p>
       <label>Status
         <select data-status="${esc(o.id)}">
           ${["pending", "confirmed", "shipped", "delivered", "cancelled"]
@@ -981,15 +857,11 @@ async function loadAdminData() {
     ["Product views", counts.product_view || 0],
     ["Add to cart", counts.add_to_cart || 0],
     ["Checkout starts", counts.checkout_start || 0]
-  ].map(x => `
-    <div class="va-card"><span>${x[0]}</span><strong>${x[1]}</strong></div>
-  `).join("");
+  ].map(x => `<div class="va-card"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join("");
 
   await renderProductTable();
 
-  if (!errors.length) {
-    message("vaMessage", "Dashboard updated.");
-  }
+  if (!errors.length) message("vaMessage", "Dashboard updated.");
 }
 
 // =====================================
@@ -1022,7 +894,7 @@ async function updateOrderStatus(e) {
 }
 
 // =====================================
-// REVIEW APPROVAL / DELETE
+// REVIEW ACTIONS
 // =====================================
 
 async function reviewAction(e) {
@@ -1030,7 +902,6 @@ async function reviewAction(e) {
   const d = e.target.closest("[data-rdelete]");
 
   if (!a && !d) return;
-
   if (d && !confirm("Delete this review?")) return;
 
   try {
@@ -1039,8 +910,8 @@ async function reviewAction(e) {
       : await db.from("reviews").delete().eq("id", Number(d.dataset.rdelete));
 
     if (result.error) throw result.error;
-
     await loadAdminData();
+
   } catch (err) {
     message("vaMessage", err.message || "Review action failed.", true);
   }
@@ -1069,6 +940,7 @@ $("adminDialog").addEventListener("click", e => {
 $("adminLoginForm").addEventListener("submit", async e => {
   e.preventDefault();
 
+  const form = e.currentTarget;
   const email = $("adminEmail").value.trim().toLowerCase();
   const password = $("adminPassword").value;
 
@@ -1077,14 +949,13 @@ $("adminLoginForm").addEventListener("submit", async e => {
     return;
   }
 
-  const btn = e.currentTarget.querySelector('[type="submit"]');
+  const btn = form.querySelector('[type="submit"]');
   if (btn) btn.disabled = true;
 
   message("loginMessage", "Signing in…");
 
   try {
     const { data, error } = await db.auth.signInWithPassword({ email, password });
-
     if (error) throw error;
 
     if (data.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
@@ -1099,6 +970,7 @@ $("adminLoginForm").addEventListener("submit", async e => {
     $("adminSection").scrollIntoView({ behavior: "smooth" });
 
     await loadAdminData();
+
   } catch (err) {
     message("loginMessage", err.message || "Login failed.", true);
   } finally {
@@ -1107,12 +979,11 @@ $("adminLoginForm").addEventListener("submit", async e => {
 });
 
 // =====================================
-// INITIALIZE WEBSITE
+// INITIALIZE
 // =====================================
 
 (async () => {
   trackEvent("page_view");
-
   await loadProducts();
 
   const { data, error } = await db.auth.getSession();
