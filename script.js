@@ -1,361 +1,1132 @@
+
 (() => {
-  if (window.__verroStorefrontInitialized) return;
-  window.__verroStorefrontInitialized = true;
+"use strict";
+
+if (window.__verroStorefrontInitialized) return;
+window.__verroStorefrontInitialized = true;
 
 // =====================================
-// VÉRRO — STORE FRONTEND
+// VÉRRO — COMPLETE STORE SYSTEM
 // =====================================
 
 const SUPABASE_URL = "https://slkuvuygbmltldgnacnj.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_Nh6muXD3DzdyZhz4Or31VQ_uWRPrHc2";
+const SUPABASE_KEY = "sb_publishable_Nh6muXD3DzdyZhz4Or31VQ_uWRPrHc2";
 const ADMIN_EMAIL = "abdullahbinkhalil79@gmail.com";
 const ADMIN_WHATSAPP = "01790682661";
+const BUCKET = "product-images";
 
-const products = [
-  { id: 1, name: "Classic Everyday Bag", category: "Fashion", price: 1850, image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=700" },
-  { id: 2, name: "Minimalist Watch", category: "Lifestyle", price: 2450, image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=700" },
-  { id: 3, name: "Wireless Headphones", category: "Technology", price: 3200, image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=700" },
-  { id: 4, name: "Premium Sneakers", category: "Fashion", price: 2800, image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=700" },
-  { id: 5, name: "Modern Desk Lamp", category: "Lifestyle", price: 1650, image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=700" },
-  { id: 6, name: "Smart Speaker", category: "Technology", price: 3900, image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=700" }
-];
+const db = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
+const $ = id => document.getElementById(id);
 
-const supabase = window.supabase?.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) || null;
-let cart = loadCart();
-let selectedCategory = "All";
-let searchTerm = "";
+const money = n => "৳" + Number(n || 0).toLocaleString("en-BD");
 
-const productGrid = document.getElementById("productGrid");
-const cartCount = document.getElementById("cartCount");
-const cartDrawer = document.getElementById("cartDrawer");
-const cartOverlay = document.getElementById("cartOverlay");
-const cartItems = document.getElementById("cartItems");
-const cartTotal = document.getElementById("cartTotal");
-const checkoutForm = document.getElementById("checkoutForm");
-const checkoutButton = document.getElementById("checkoutButton");
-const checkoutMessage = document.getElementById("checkoutMessage");
-const whatsappNotice = document.getElementById("whatsappNotice");
-const adminDialog = document.getElementById("adminDialog");
-const adminSection = document.getElementById("adminSection");
-const adminOrders = document.getElementById("adminOrders");
-const adminMessage = document.getElementById("adminMessage");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+}[c]));
 
-function formatPrice(price) {
-  return "৳" + Number(price).toLocaleString("en-BD");
+let products = [];
+let cart = readCart();
+let category = "All";
+let search = "";
+let adminOrders = [];
+
+if (!db) {
+  const grid = $("productGrid");
+  if (grid) grid.textContent = "Database library did not load. Refresh the page.";
+  return;
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, character => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[character]);
+// =====================================
+// GENERAL HELPERS
+// =====================================
+
+function message(id, text, error = false) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = error ? "#d77" : "#a9bd8b";
 }
 
-function loadCart() {
+function makeId() {
+  return crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// =====================================
+// ANALYTICS
+// =====================================
+
+function getSessionId() {
   try {
-    const saved = JSON.parse(localStorage.getItem("verroCart") || "[]");
-    return Array.isArray(saved) ? saved.filter(item =>
-      products.some(product => product.id === item.id) && Number.isInteger(item.quantity) && item.quantity > 0
-    ) : [];
+    let id = localStorage.getItem("verroAnalyticsSession");
+    if (!id) {
+      id = makeId();
+      localStorage.setItem("verroAnalyticsSession", id);
+    }
+    return id;
+  } catch {
+    return makeId();
+  }
+}
+
+async function trackEvent(eventType) {
+  const allowed = [
+    "page_view",
+    "product_view",
+    "add_to_cart",
+    "checkout_start"
+  ];
+
+  if (!allowed.includes(eventType)) return;
+
+  try {
+    const { error } = await db.from("site_events").insert({
+      event_type: eventType,
+      source: document.referrer || "direct",
+      page_path: location.pathname,
+      session_id: getSessionId()
+    });
+
+    if (error) console.warn("Analytics event failed:", error.message);
+  } catch (err) {
+    console.warn("Analytics unavailable:", err);
+  }
+}
+
+// =====================================
+// CART STORAGE
+// =====================================
+
+function readCart() {
+  try {
+    const x = JSON.parse(localStorage.getItem("verroCart") || "[]");
+    return Array.isArray(x)
+      ? x.filter(i => i && Number(i.id) > 0 && Number(i.quantity) > 0)
+      : [];
   } catch {
     return [];
   }
 }
 
 function saveCart() {
-  localStorage.setItem("verroCart", JSON.stringify(cart));
+  try {
+    localStorage.setItem("verroCart", JSON.stringify(cart));
+  } catch (err) {
+    console.warn("Cart could not be saved:", err);
+  }
 }
+
+// =====================================
+// PRODUCT CATEGORIES
+// =====================================
+
+function renderCategories() {
+  const list = $("categoryList");
+  if (!list) return;
+
+  const cats = [
+    ...new Set(
+      products.filter(p => p.active)
+        .map(p => p.category)
+        .filter(Boolean)
+    )
+  ].sort();
+
+  if (category !== "All" && !cats.includes(category)) {
+    category = "All";
+  }
+
+  list.innerHTML =
+    `<button class="category ${category === "All" ? "active" : ""}"
+      data-category="All">All products</button>` +
+    cats.map(c => `
+      <button class="category ${category === c ? "active" : ""}"
+        data-category="${esc(c)}">${esc(c)}</button>
+    `).join("");
+}
+
+// =====================================
+// PRODUCT DISPLAY
+// =====================================
 
 function renderProducts() {
-  const filteredProducts = products.filter(product => {
-    const matchesCategory = selectedCategory === "All" || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const grid = $("productGrid");
+  if (!grid) return;
 
-  if (!filteredProducts.length) {
-    productGrid.innerHTML = '<p class="loading-message">No products found.</p>';
-    return;
+  const rows = products.filter(p =>
+    p.active &&
+    (category === "All" || p.category === category) &&
+    (
+      String(p.name || "").toLowerCase().includes(search) ||
+      String(p.description || "").toLowerCase().includes(search)
+    )
+  );
+
+  grid.innerHTML = rows.length
+    ? rows.map(p => `
+      <article class="product-card" data-view="${p.id}">
+        <img class="product-image"
+          src="${esc(p.image_url || "https://placehold.co/700x500?text=VERRO")}"
+          alt="${esc(p.name)}" loading="lazy">
+        <div class="product-info">
+          <p class="product-category">${esc(p.category)}</p>
+          <h3>${esc(p.name)}</h3>
+          <p>${esc(p.description || "")}</p>
+          <p class="product-price">${money(p.price)}</p>
+          <button class="add-to-cart" data-add="${p.id}"
+            ${p.stock < 1 ? "disabled" : ""}>
+            ${p.stock < 1 ? "OUT OF STOCK" : "ADD TO BAG +"}
+          </button>
+        </div>
+      </article>
+    `).join("")
+    : '<p class="loading-message">No products found.</p>';
+}
+
+// =====================================
+// LOAD PRODUCTS
+// =====================================
+
+async function loadProducts() {
+  const grid = $("productGrid");
+
+  if (grid) grid.textContent = "Loading products…";
+
+  const { data, error } = await db
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    if (grid) grid.textContent = "Could not load products. Please refresh.";
+    return false;
   }
 
-  productGrid.innerHTML = filteredProducts.map(product => `
-    <article class="product-card">
-      <img class="product-image" src="${product.image}" alt="${escapeHtml(product.name)}" loading="lazy">
-      <div class="product-info">
-        <p class="product-category">${escapeHtml(product.category)}</p>
-        <h3>${escapeHtml(product.name)}</h3>
-        <p class="product-price">${formatPrice(product.price)}</p>
-        <button class="add-to-cart" data-add-product="${product.id}" type="button">ADD TO BAG +</button>
+  products = data || [];
+
+  cart = cart.reduce((result, item) => {
+    const p = products.find(x => Number(x.id) === Number(item.id));
+
+    if (!p || !p.active || Number(p.stock) < 1) return result;
+
+    const quantity = Math.min(
+      10,
+      Number(p.stock),
+      Math.max(1, Number(item.quantity) || 1)
+    );
+
+    result.push({ ...p, quantity });
+    return result;
+  }, []);
+
+  saveCart();
+  renderCategories();
+  renderProducts();
+  renderCart();
+
+  return true;
+}
+
+// =====================================
+// SHOPPING CART
+// =====================================
+
+function renderCart() {
+  $("cartCount").textContent =
+    cart.reduce((n, x) => n + Number(x.quantity), 0);
+
+  $("cartTotal").textContent = money(
+    cart.reduce((n, x) => n + Number(x.price) * x.quantity, 0)
+  );
+
+  $("cartItems").innerHTML = cart.length
+    ? cart.map(x => `
+      <div class="cart-product">
+        <div>
+          <strong>${esc(x.name)}</strong>
+          <p>${money(x.price)} × ${x.quantity}</p>
+        </div>
+        <div class="cart-controls">
+          <button data-q="${x.id}" data-d="-1">−</button>
+          <span>${x.quantity}</span>
+          <button data-q="${x.id}" data-d="1"
+            ${x.quantity >= Math.min(10, x.stock) ? "disabled" : ""}>+</button>
+          <button data-r="${x.id}">Remove</button>
+        </div>
       </div>
-    </article>
-  `).join("");
-}
-
-function addToCart(productId) {
-  const product = products.find(item => item.id === productId);
-  if (!product) return;
-
-  const existingItem = cart.find(item => item.id === productId);
-  if (existingItem) {
-    if (existingItem.quantity >= 10) return;
-    existingItem.quantity++;
-  } else cart.push({ ...product, quantity: 1 });
-
-  saveCart();
-  updateCart();
-  openCart();
-}
-
-function updateCart() {
-  const totalQuantity = cart.reduce((total, item) => total + item.quantity, 0);
-  const totalPrice = cart.reduce((total, item) => total + item.price * item.quantity, 0);
-  cartCount.textContent = totalQuantity;
-  cartTotal.textContent = formatPrice(totalPrice);
-
-  if (!cart.length) {
-    cartItems.innerHTML = "<p>Your shopping bag is empty.</p>";
-    return;
-  }
-
-  cartItems.innerHTML = cart.map(item => `
-    <div class="cart-product">
-      <div><strong>${escapeHtml(item.name)}</strong><p>${formatPrice(item.price)} × ${item.quantity}</p></div>
-      <div class="cart-controls">
-        <button type="button" data-quantity-id="${item.id}" data-quantity-change="-1" aria-label="Decrease quantity">−</button>
-        <span>${item.quantity}</span>
-        <button type="button" data-quantity-id="${item.id}" data-quantity-change="1" aria-label="Increase quantity" ${item.quantity >= 10 ? "disabled" : ""}>+</button>
-        <button type="button" data-remove-id="${item.id}">Remove</button>
-      </div>
-    </div>
-  `).join("");
-}
-
-function changeQuantity(productId, amount) {
-  const item = cart.find(product => product.id === productId);
-  if (!item) return;
-  item.quantity += amount;
-  if (item.quantity <= 0) cart = cart.filter(product => product.id !== productId);
-  saveCart();
-  updateCart();
-}
-
-function removeFromCart(productId) {
-  cart = cart.filter(item => item.id !== productId);
-  saveCart();
-  updateCart();
+    `).join("")
+    : "<p>Your shopping bag is empty.</p>";
 }
 
 function openCart() {
-  cartDrawer.classList.add("show");
-  cartOverlay.classList.add("show");
+  $("cartDrawer").classList.add("show");
+  $("cartOverlay").classList.add("show");
 }
 
 function closeCart() {
-  cartDrawer.classList.remove("show");
-  cartOverlay.classList.remove("show");
+  $("cartDrawer").classList.remove("show");
+  $("cartOverlay").classList.remove("show");
 }
 
-productGrid.addEventListener("click", event => {
-  const button = event.target.closest("[data-add-product]");
-  if (button) addToCart(Number(button.dataset.addProduct));
+// =====================================
+// PRODUCT EVENTS
+// =====================================
+
+$("productGrid").addEventListener("click", e => {
+  const card = e.target.closest("[data-view]");
+  const button = e.target.closest("[data-add]");
+
+  if (card && !button) {
+    trackEvent("product_view");
+  }
+
+  if (!button) return;
+
+  const p = products.find(x => Number(x.id) === Number(button.dataset.add));
+  if (!p || !p.active || p.stock < 1) return;
+
+  const old = cart.find(x => Number(x.id) === Number(p.id));
+
+  if (old) {
+    if (old.quantity >= Math.min(10, p.stock)) return;
+    old.quantity++;
+  } else {
+    cart.push({ ...p, quantity: 1 });
+  }
+
+  trackEvent("add_to_cart");
+  saveCart();
+  renderCart();
+  openCart();
 });
 
-cartItems.addEventListener("click", event => {
-  const quantityButton = event.target.closest("[data-quantity-id]");
-  const removeButton = event.target.closest("[data-remove-id]");
-  if (quantityButton) changeQuantity(Number(quantityButton.dataset.quantityId), Number(quantityButton.dataset.quantityChange));
-  if (removeButton) removeFromCart(Number(removeButton.dataset.removeId));
-});
+// =====================================
+// CATEGORY + SEARCH
+// =====================================
 
-document.getElementById("cartButton").addEventListener("click", openCart);
-document.getElementById("closeCart").addEventListener("click", closeCart);
-cartOverlay.addEventListener("click", closeCart);
-document.addEventListener("keydown", event => {
-  if (event.key === "Escape") closeCart();
-});
+$("categoryList").addEventListener("click", e => {
+  const b = e.target.closest("[data-category]");
+  if (!b) return;
 
-document.querySelectorAll(".category").forEach(button => {
-  button.addEventListener("click", () => {
-    document.querySelectorAll(".category").forEach(item => item.classList.remove("active"));
-    button.classList.add("active");
-    selectedCategory = button.dataset.category;
-    renderProducts();
-  });
-});
-
-document.getElementById("searchButton").addEventListener("click", () => {
-  document.getElementById("searchArea").classList.toggle("show");
-  document.getElementById("searchInput").focus();
-});
-document.getElementById("searchInput").addEventListener("input", event => {
-  searchTerm = event.target.value;
+  category = b.dataset.category;
+  renderCategories();
   renderProducts();
 });
 
-checkoutForm.addEventListener("submit", async event => {
-  event.preventDefault();
-  checkoutMessage.textContent = "";
-  whatsappNotice.hidden = true;
+$("searchButton").addEventListener("click", () => {
+  $("searchArea").classList.toggle("show");
+  $("searchInput").focus();
+});
+
+$("searchInput").addEventListener("input", e => {
+  search = e.target.value.toLowerCase().trim();
+  renderProducts();
+});
+
+// =====================================
+// CART CONTROLS
+// =====================================
+
+$("cartButton").addEventListener("click", openCart);
+$("closeCart").addEventListener("click", closeCart);
+$("cartOverlay").addEventListener("click", closeCart);
+
+$("cartItems").addEventListener("click", e => {
+  const q = e.target.closest("[data-q]");
+  const r = e.target.closest("[data-r]");
+
+  if (q) {
+    const x = cart.find(i => Number(i.id) === Number(q.dataset.q));
+    const p = products.find(i => Number(i.id) === Number(q.dataset.q));
+
+    if (x && p) {
+      const next = x.quantity + Number(q.dataset.d);
+
+      if (next < 1) {
+        cart = cart.filter(i => i.id !== x.id);
+      } else {
+        x.quantity = Math.min(next, 10, Number(p.stock));
+      }
+    }
+  }
+
+  if (r) {
+    cart = cart.filter(i => Number(i.id) !== Number(r.dataset.r));
+  }
+
+  saveCart();
+  renderCart();
+});
+
+// =====================================
+// COD CHECKOUT
+// =====================================
+
+$("checkoutForm").addEventListener("submit", async e => {
+  e.preventDefault();
+
+  message("checkoutMessage", "");
+  $("whatsappNotice").hidden = true;
 
   if (!cart.length) {
-    checkoutMessage.textContent = "Your shopping bag is empty.";
-    return;
-  }
-  if (!supabase) {
-    checkoutMessage.textContent = "Order service did not load. Please refresh and try again.";
+    message("checkoutMessage", "Your bag is empty.", true);
     return;
   }
 
-  const formData = new FormData(checkoutForm);
-  const orderId = crypto.randomUUID();
+  trackEvent("checkout_start");
+
+  const fd = new FormData(e.currentTarget);
+  const id = makeId();
+
   const order = {
-    id: orderId,
-    customer_name: formData.get("customerName").trim(),
-    phone: formData.get("phone").trim(),
-    address: formData.get("address").trim(),
-    payment_method: "Cash on Delivery",
-    items: cart.map(item => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
-    total: cart.reduce((total, item) => total + item.price * item.quantity, 0),
+    id,
+    customer_name: String(fd.get("customerName") || "").trim(),
+    phone: String(fd.get("phone") || "").trim(),
+    address: String(fd.get("address") || "").trim(),
+
+    // Database requires exactly COD
+    payment_method: "COD",
+
+    items: cart.map(x => ({
+      id: Number(x.id),
+      name: x.name,
+      price: Number(x.price),
+      quantity: Number(x.quantity)
+    })),
+
+    total: cart.reduce(
+      (n, x) => n + Number(x.price) * x.quantity, 0
+    ),
+
     status: "pending"
   };
 
-  checkoutButton.disabled = true;
-  checkoutButton.textContent = "Placing order…";
+  if (!order.customer_name || !order.phone || !order.address) {
+    message("checkoutMessage", "Please complete all customer details.", true);
+    return;
+  }
+
+  const btn = $("checkoutButton");
+  btn.disabled = true;
+  btn.textContent = "Placing order…";
+
   try {
-    const { error } = await supabase.from("orders").insert(order);
+    const { data: latest, error: pe } = await db
+      .from("products")
+      .select("id,name,price,stock,active")
+      .in("id", order.items.map(x => x.id));
+
+    if (pe) throw pe;
+
+    for (const item of order.items) {
+      const p = (latest || []).find(x => Number(x.id) === item.id);
+
+      if (
+        !p ||
+        !p.active ||
+        Number(p.price) !== item.price ||
+        Number(p.stock) < item.quantity
+      ) {
+        throw Error(
+          "A product price or stock changed. Please refresh your bag."
+        );
+      }
+    }
+
+    const { error } = await db.from("orders").insert(order);
     if (error) throw error;
+
     cart = [];
     saveCart();
-    updateCart();
-    checkoutForm.reset();
-    const reference = orderId.slice(0, 8).toUpperCase();
-    checkoutMessage.textContent = `Order received! Reference: ${reference}. We will contact you to confirm.`;
-    const whatsappText = [
-      `New VÉRRO COD order ${reference}`,
+    renderCart();
+    e.currentTarget.reset();
+
+    const ref = id.slice(0, 8).toUpperCase();
+
+    message(
+      "checkoutMessage",
+      `Order received! Reference: ${ref}. We will contact you to confirm.`
+    );
+
+    const text = [
+      `New VÉRRO COD order ${ref}`,
       `Customer: ${order.customer_name}`,
       `Phone: ${order.phone}`,
       `Address: ${order.address}`,
-      ...order.items.map(item => `${item.name} × ${item.quantity} — ${formatPrice(item.price * item.quantity)}`),
-      `Total: ${formatPrice(order.total)}`
+      ...order.items.map(i =>
+        `${i.name} × ${i.quantity} — ${money(i.price * i.quantity)}`
+      ),
+      `Total: ${money(order.total)}`
     ].join("\n");
-    const adminNumber = ADMIN_WHATSAPP.replace(/\D/g, "").replace(/^0/, "88");
-    whatsappNotice.href = `https://wa.me/${adminNumber}?text=${encodeURIComponent(whatsappText)}`;
-    whatsappNotice.hidden = false;
-  } catch (error) {
-    console.error("Order submission failed:", error);
-    checkoutMessage.textContent = "We couldn't submit your order. Please try again or contact us.";
+
+    const wa = ADMIN_WHATSAPP.replace(/\D/g, "").replace(/^0/, "88");
+
+    $("whatsappNotice").href =
+      `https://wa.me/${wa}?text=${encodeURIComponent(text)}`;
+
+    $("whatsappNotice").hidden = false;
+
+    await loadProducts();
+
+  } catch (err) {
+    console.error("Checkout error:", err);
+    message(
+      "checkoutMessage",
+      err.message || "Order could not be submitted.",
+      true
+    );
   } finally {
-    checkoutButton.disabled = false;
-    checkoutButton.textContent = "Place COD Order";
+    btn.disabled = false;
+    btn.textContent = "Place COD Order";
   }
 });
 
-function showAdminLogin() {
-  document.getElementById("adminEmail").value = ADMIN_EMAIL;
-  document.getElementById("loginMessage").textContent = "";
-  adminDialog.showModal();
+// =====================================
+// ADMIN DASHBOARD STYLES
+// =====================================
+
+function injectAdminStyles() {
+  if ($("verroAdminStyles")) return;
+
+  const s = document.createElement("style");
+  s.id = "verroAdminStyles";
+
+  s.textContent = `
+    #adminSection {
+      background:#11110f;
+      color:#f4f1e9;
+      padding:55px 7%;
+    }
+    #adminSection h2,#adminSection h3 { color:#f4f1e9; }
+    .va-stats,.va-formgrid {
+      display:grid;
+      grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:12px;
+      margin:20px 0;
+    }
+    .va-card,.va-panel {
+      background:#1c1c19;
+      border:1px solid #393831;
+      padding:17px;
+    }
+    .va-card span {
+      display:block;
+      color:#aaa;
+      font-size:11px;
+    }
+    .va-card strong {
+      display:block;
+      color:#d2b98b;
+      font-size:23px;
+      margin-top:8px;
+    }
+    .va-tabs {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin:24px 0;
+    }
+    .va-tabs button,.va-btn {
+      padding:10px 13px;
+      border:1px solid #625b4d;
+      background:transparent;
+      color:#eee;
+      font-size:12px;
+      cursor:pointer;
+    }
+    .va-tabs button.active,.va-btn.primary {
+      background:#c0a477;
+      color:#171714;
+    }
+    .va-panel { margin:12px 0; }
+    .va-formgrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .va-formgrid label {
+      display:grid;
+      gap:6px;
+      font-size:12px;
+      color:#ddd;
+    }
+    .va-formgrid input,.va-formgrid textarea {
+      padding:10px;
+      background:#10100e;
+      color:#fff;
+      border:1px solid #555;
+    }
+    .va-wide { grid-column:1/-1; }
+    .va-tablewrap { overflow:auto; }
+    .va-table {
+      border-collapse:collapse;
+      width:100%;
+      min-width:620px;
+      font-size:12px;
+    }
+    .va-table td,.va-table th {
+      padding:11px;
+      border-bottom:1px solid #444;
+      text-align:left;
+    }
+    .va-table th { color:#c9b58e; }
+    .va-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .va-order,.va-review {
+      padding:15px;
+      border:1px solid #444;
+      margin:12px 0;
+      font-size:13px;
+    }
+    .va-order p,.va-review p { margin:7px 0; color:#ccc; }
+    .va-order select {
+      padding:8px;
+      background:#111;
+      color:white;
+      border:1px solid #555;
+    }
+    .va-muted { color:#aaa; font-size:12px; }
+    @media(max-width:650px) {
+      .va-stats { grid-template-columns:repeat(2,1fr); }
+      .va-formgrid { grid-template-columns:1fr; }
+      .va-wide { grid-column:auto; }
+      #adminSection { padding:35px 5%; }
+    }
+  `;
+
+  document.head.appendChild(s);
 }
 
-document.getElementById("adminEntry").addEventListener("click", showAdminLogin);
-document.getElementById("closeAdminDialog").addEventListener("click", () => adminDialog.close());
-adminDialog.addEventListener("click", event => {
-  if (event.target === adminDialog) adminDialog.close();
-});
+// =====================================
+// BUILD ADMIN DASHBOARD
+// =====================================
 
-document.getElementById("adminLoginForm").addEventListener("submit", async event => {
-  event.preventDefault();
-  const loginMessage = document.getElementById("loginMessage");
-  if (!supabase) {
-    loginMessage.textContent = "Admin sign-in service is unavailable.";
-    return;
-  }
+function buildAdmin() {
+  injectAdminStyles();
 
-  const email = document.getElementById("adminEmail").value.trim().toLowerCase();
-  const password = document.getElementById("adminPassword").value;
-  if (email !== ADMIN_EMAIL) {
-    loginMessage.textContent = "This email is not authorized for admin access.";
-    return;
-  }
-
-  loginMessage.textContent = "Signing in…";
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error || data.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
-    loginMessage.textContent = error?.message || "This account is not authorized.";
-    return;
-  }
-
-  adminDialog.close();
-  document.getElementById("adminPassword").value = "";
-  adminSection.hidden = false;
-  adminSection.scrollIntoView({ behavior: "smooth" });
-  await loadOrders();
-});
-
-async function loadOrders() {
-  adminMessage.textContent = "Loading orders…";
-  adminOrders.innerHTML = "";
-  const { data, error } = await supabase.from("orders").select("*").order("created_at", { ascending: false });
-  if (error) {
-    adminMessage.textContent = "Could not load orders. Check the database setup and admin account.";
-    console.error("Loading orders failed:", error);
-    return;
-  }
-  adminMessage.textContent = data.length ? `${data.length} order${data.length === 1 ? "" : "s"}` : "No orders yet.";
-  adminOrders.innerHTML = data.map(renderAdminOrder).join("");
-}
-
-function renderAdminOrder(order) {
-  const validStatuses = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
-  const status = validStatuses.includes(order.status) ? order.status : "pending";
-  const items = Array.isArray(order.items) ? order.items : [];
-  const orderDate = new Date(order.created_at).toLocaleString("en-BD");
-  const phoneDigits = String(order.phone).replace(/\D/g, "");
-  const waNumber = phoneDigits.startsWith("0") ? `88${phoneDigits}` : phoneDigits;
-  const waMessage = encodeURIComponent(`Hello ${order.customer_name}, this is VÉRRO regarding your order ${order.id.slice(0, 8).toUpperCase()}.`);
-
-  return `
-    <article class="admin-order">
-      <div class="order-topline"><strong>Order ${escapeHtml(order.id.slice(0, 8).toUpperCase())}</strong><time>${escapeHtml(orderDate)}</time></div>
-      <div class="order-details">
-        <p><strong>${escapeHtml(order.customer_name)}</strong></p>
-        <p><a href="tel:${escapeHtml(order.phone)}">${escapeHtml(order.phone)}</a></p>
-        <p>${escapeHtml(order.address)}</p>
-        <p><strong>Payment:</strong> ${escapeHtml(order.payment_method)} · <strong>Total:</strong> ${formatPrice(order.total)}</p>
-        <ul>${items.map(item => `<li>${escapeHtml(item.name)} × ${Number(item.quantity)} — ${formatPrice(Number(item.price) * Number(item.quantity))}</li>`).join("")}</ul>
+  $("adminSection").innerHTML = `
+    <div class="admin-heading">
+      <div>
+        <p class="eyebrow">PRIVATE AREA</p>
+        <h2>VÉRRO Management</h2>
       </div>
-      <div class="order-bottomline">
-        <label>Status
-          <select data-order-status="${escapeHtml(order.id)}">
-            ${validStatuses.map(value => `<option value="${value}" ${status === value ? "selected" : ""}>${value[0].toUpperCase()}${value.slice(1)}</option>`).join("")}
-          </select>
+      <div class="admin-actions">
+        <button class="secondary-button" id="vaRefresh">Refresh</button>
+        <button class="secondary-button" id="vaLogout">Sign out</button>
+      </div>
+    </div>
+
+    <p id="vaMessage" class="form-message"></p>
+    <div class="va-stats" id="vaStats"></div>
+
+    <div class="va-tabs">
+      <button class="active" data-tab="products">Products</button>
+      <button data-tab="orders">Orders</button>
+      <button data-tab="reviews">Reviews</button>
+      <button data-tab="customers">Customers</button>
+      <button data-tab="analytics">Analytics</button>
+    </div>
+
+    <section class="va-panel" id="vaProducts">
+      <h3>Product management</h3>
+      <p class="va-muted">Upload products you want to sell.</p>
+
+      <form id="vaProductForm" class="va-formgrid">
+        <input type="hidden" name="id">
+        <label>Product name
+          <input name="name" required maxlength="150">
         </label>
-        <a class="secondary-button" href="https://wa.me/${escapeHtml(waNumber)}?text=${waMessage}" target="_blank" rel="noopener">Message customer</a>
+        <label>Category
+          <input name="category" required maxlength="80">
+        </label>
+        <label>Price (BDT)
+          <input name="price" type="number" min="1" step="1" required>
+        </label>
+        <label>Stock quantity
+          <input name="stock" type="number" min="0" step="1" value="0" required>
+        </label>
+        <label class="va-wide">Description
+          <textarea name="description" rows="3"></textarea>
+        </label>
+        <label class="va-wide">Product image
+          <input name="image" type="file" accept="image/*">
+        </label>
+        <label class="va-wide">
+          <span><input name="active" type="checkbox" checked> Publish product</span>
+        </label>
+        <div class="va-wide va-actions">
+          <button class="va-btn primary" type="submit">Save product</button>
+          <button class="va-btn" type="button" id="vaClear">Clear</button>
+        </div>
+        <p class="va-wide" id="vaProductMsg"></p>
+      </form>
+
+      <div class="va-tablewrap">
+        <table class="va-table">
+          <thead>
+            <tr>
+              <th>Product</th><th>Price</th><th>Stock</th>
+              <th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vaProductRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="va-panel" id="vaOrders" hidden>
+      <h3>Orders</h3><div id="vaOrderRows"></div>
+    </section>
+
+    <section class="va-panel" id="vaReviews" hidden>
+      <h3>Customer reviews</h3><div id="vaReviewRows"></div>
+    </section>
+
+    <section class="va-panel" id="vaCustomers" hidden>
+      <h3>Customers</h3>
+      <div class="va-tablewrap">
+        <table class="va-table">
+          <thead>
+            <tr><th>Name</th><th>Phone</th><th>Orders</th><th>Order value</th></tr>
+          </thead>
+          <tbody id="vaCustomerRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="va-panel" id="vaAnalytics" hidden>
+      <h3>Website events</h3>
+      <div class="va-stats" id="vaAnalyticsRows"></div>
+      <p class="va-muted">
+        Facebook/Instagram Ads metrics require a separate authorized Meta API connection.
+      </p>
+    </section>
+  `;
+
+  $("vaRefresh").onclick = loadAdminData;
+
+  $("vaLogout").onclick = async () => {
+    const { error } = await db.auth.signOut();
+    if (error) {
+      message("vaMessage", error.message, true);
+      return;
+    }
+    $("adminSection").hidden = true;
+  };
+
+  document.querySelectorAll(".va-tabs button").forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll(".va-tabs button")
+        .forEach(x => x.classList.toggle("active", x === b));
+
+      ["products", "orders", "reviews", "customers", "analytics"]
+        .forEach(k => {
+          $("va" + k[0].toUpperCase() + k.slice(1)).hidden =
+            k !== b.dataset.tab;
+        });
+    };
+  });
+
+  $("vaClear").onclick = resetProductForm;
+  $("vaProductForm").onsubmit = saveProduct;
+  $("vaProductRows").onclick = productAction;
+  $("vaOrderRows").onchange = updateOrderStatus;
+  $("vaReviewRows").onclick = reviewAction;
+}
+
+// =====================================
+// PRODUCT FORM
+// =====================================
+
+function resetProductForm() {
+  const f = $("vaProductForm");
+  f.reset();
+  f.elements.id.value = "";
+  f.elements.active.checked = true;
+  message("vaProductMsg", "");
+}
+
+async function renderProductTable() {
+  $("vaProductRows").innerHTML = products.map(p => `
+    <tr>
+      <td>${esc(p.name)}<br><span class="va-muted">${esc(p.category)}</span></td>
+      <td>${money(p.price)}</td>
+      <td>${p.stock}</td>
+      <td>${p.active ? "Active" : "Hidden"}</td>
+      <td>
+        <div class="va-actions">
+          <button class="va-btn" data-edit="${p.id}">Edit</button>
+          <button class="va-btn" data-delete="${p.id}">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join("") || '<tr><td colspan="5">No products added yet.</td></tr>';
+}
+
+// =====================================
+// SAVE PRODUCT
+// =====================================
+
+async function saveProduct(e) {
+  e.preventDefault();
+
+  const f = e.currentTarget;
+  const fd = new FormData(f);
+  const id = fd.get("id");
+  const price = Number(fd.get("price"));
+  const stock = Number(fd.get("stock"));
+
+  if (
+    !Number.isInteger(price) || price <= 0 ||
+    !Number.isInteger(stock) || stock < 0
+  ) {
+    message("vaProductMsg", "Enter a valid price and stock quantity.", true);
+    return;
+  }
+
+  const btn = f.querySelector('[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+
+  try {
+    let image_url = id
+      ? products.find(p => Number(p.id) === Number(id))?.image_url || ""
+      : "";
+
+    const file = f.elements.image.files[0];
+
+    if (file) {
+      if (!file.type.startsWith("image/")) throw Error("Choose an image file.");
+      if (file.size > 5 * 1024 * 1024) throw Error("Image must be 5 MB or smaller.");
+
+      const ext = (file.name.split(".").pop() || "jpg")
+        .toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+
+      const path = `${makeId()}.${ext}`;
+
+      const { error: upErr } = await db.storage
+        .from(BUCKET)
+        .upload(path, file, { contentType: file.type });
+
+      if (upErr) throw upErr;
+
+      image_url = db.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    }
+
+    const payload = {
+      name: String(fd.get("name")).trim(),
+      category: String(fd.get("category")).trim(),
+      price,
+      stock,
+      description: String(fd.get("description") || "").trim(),
+      active: f.elements.active.checked
+    };
+
+    if (image_url) payload.image_url = image_url;
+
+    const result = id
+      ? await db.from("products").update(payload).eq("id", Number(id))
+      : await db.from("products").insert(payload);
+
+    if (result.error) throw result.error;
+
+    resetProductForm();
+    await loadProducts();
+    await renderProductTable();
+
+    message("vaMessage", id ? "Product updated." : "Product added.");
+  } catch (err) {
+    console.error(err);
+    message("vaProductMsg", err.message || "Save failed.", true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save product";
+  }
+}
+
+// =====================================
+// EDIT / DELETE PRODUCT
+// =====================================
+
+async function productAction(e) {
+  const edit = e.target.closest("[data-edit]");
+  const del = e.target.closest("[data-delete]");
+
+  if (edit) {
+    const p = products.find(x => Number(x.id) === Number(edit.dataset.edit));
+    const f = $("vaProductForm");
+    if (!p) return;
+
+    f.elements.id.value = p.id;
+    f.elements.name.value = p.name;
+    f.elements.category.value = p.category;
+    f.elements.price.value = p.price;
+    f.elements.stock.value = p.stock;
+    f.elements.description.value = p.description || "";
+    f.elements.active.checked = p.active;
+    f.scrollIntoView({ behavior: "smooth" });
+  }
+
+  if (del) {
+    const p = products.find(x => Number(x.id) === Number(del.dataset.delete));
+
+    if (p && confirm(`Delete ${p.name}?`)) {
+      const { error } = await db.from("products").delete().eq("id", p.id);
+
+      if (error) {
+        message("vaMessage", error.message, true);
+      } else {
+        await loadProducts();
+        await renderProductTable();
+        message("vaMessage", "Product deleted.");
+      }
+    }
+  }
+}
+
+// =====================================
+// ADMIN DASHBOARD DATA
+// =====================================
+
+async function loadAdminData() {
+  message("vaMessage", "Loading dashboard…");
+
+  const [ord, rev, events] = await Promise.all([
+    db.from("orders").select("*").order("created_at", { ascending: false }),
+    db.from("reviews").select("*").order("created_at", { ascending: false }),
+    db.from("site_events").select("event_type")
+  ]);
+
+  const errors = [ord, rev, events].filter(x => x.error);
+
+  if (errors.length) {
+    console.error("Admin dashboard query errors:", errors.map(x => x.error));
+    message(
+      "vaMessage",
+      "Some dashboard data could not load: " +
+      errors.map(x => x.error.message).join(" | "),
+      true
+    );
+  }
+
+  adminOrders = ord.data || [];
+
+  const delivered = adminOrders.filter(o => o.status === "delivered");
+  const customers = new Map();
+
+  adminOrders.forEach(o => {
+    const key = String(o.phone || "");
+    const c = customers.get(key) || {
+      name: o.customer_name,
+      phone: o.phone,
+      count: 0,
+      total: 0
+    };
+
+    c.count++;
+    c.total += Number(o.total);
+    customers.set(key, c);
+  });
+
+  $("vaStats").innerHTML = [
+    ["Delivered revenue", money(delivered.reduce((n, o) => n + Number(o.total), 0))],
+    ["Total orders", adminOrders.length],
+    ["Delivered orders", delivered.length],
+    ["Customers", customers.size]
+  ].map(x => `
+    <div class="va-card"><span>${x[0]}</span><strong>${x[1]}</strong></div>
+  `).join("");
+
+  $("vaOrderRows").innerHTML = adminOrders.map(o => `
+    <article class="va-order">
+      <strong>Order ${esc(String(o.id).slice(0, 8).toUpperCase())} · ${money(o.total)}</strong>
+      <p>${esc(o.customer_name)} · ${esc(o.phone)}</p>
+      <p>${esc(o.address)}</p>
+      <p>${(o.items || []).map(i => `${esc(i.name)} × ${i.quantity}`).join(", ")}</p>
+      <label>Status
+        <select data-status="${esc(o.id)}">
+          ${["pending", "confirmed", "shipped", "delivered", "cancelled"]
+            .map(s => `<option value="${s}" ${s === o.status ? "selected" : ""}>${s}</option>`)
+            .join("")}
+        </select>
+      </label>
+    </article>
+  `).join("") || "<p>No orders yet.</p>";
+
+  $("vaReviewRows").innerHTML = (rev.data || []).map(r => `
+    <article class="va-review">
+      <strong>${esc(r.customer_name)} · ${r.rating}/5</strong>
+      <p>${esc(r.comment)}</p>
+      <span class="va-muted">${r.approved ? "Published" : "Pending approval"}</span>
+      <div class="va-actions">
+        ${!r.approved ? `<button class="va-btn" data-approve="${r.id}">Approve</button>` : ""}
+        <button class="va-btn" data-rdelete="${r.id}">Delete</button>
       </div>
     </article>
-  `;
+  `).join("") || "<p>No reviews yet.</p>";
+
+  $("vaCustomerRows").innerHTML = [...customers.values()].map(c => `
+    <tr>
+      <td>${esc(c.name)}</td>
+      <td>${esc(c.phone)}</td>
+      <td>${c.count}</td>
+      <td>${money(c.total)}</td>
+    </tr>
+  `).join("") || "<tr><td colspan='4'>No customers yet.</td></tr>";
+
+  const counts = {};
+  (events.data || []).forEach(x => {
+    counts[x.event_type] = (counts[x.event_type] || 0) + 1;
+  });
+
+  $("vaAnalyticsRows").innerHTML = [
+    ["Page views", counts.page_view || 0],
+    ["Product views", counts.product_view || 0],
+    ["Add to cart", counts.add_to_cart || 0],
+    ["Checkout starts", counts.checkout_start || 0]
+  ].map(x => `
+    <div class="va-card"><span>${x[0]}</span><strong>${x[1]}</strong></div>
+  `).join("");
+
+  await renderProductTable();
+
+  if (!errors.length) {
+    message("vaMessage", "Dashboard updated.");
+  }
 }
 
-adminOrders.addEventListener("change", async event => {
-  const select = event.target.closest("[data-order-status]");
-  if (!select) return;
-  select.disabled = true;
-  const { error } = await supabase.from("orders").update({ status: select.value }).eq("id", select.dataset.orderStatus);
-  select.disabled = false;
-  if (error) {
-    adminMessage.textContent = "Status update failed. Please try again.";
-    console.error("Updating order failed:", error);
-  } else {
-    adminMessage.textContent = "Order status updated.";
+// =====================================
+// ORDER STATUS UPDATE
+// =====================================
+
+async function updateOrderStatus(e) {
+  const s = e.target.closest("[data-status]");
+  if (!s) return;
+
+  s.disabled = true;
+
+  try {
+    const { error } = await db.from("orders")
+      .update({ status: s.value })
+      .eq("id", s.dataset.status);
+
+    if (error) throw error;
+
+    const order = adminOrders.find(o => String(o.id) === s.dataset.status);
+    if (order) order.status = s.value;
+
+    message("vaMessage", "Order status updated.");
+  } catch (err) {
+    message("vaMessage", err.message || "Status update failed.", true);
+    await loadAdminData();
+  } finally {
+    s.disabled = false;
+  }
+}
+
+// =====================================
+// REVIEW APPROVAL / DELETE
+// =====================================
+
+async function reviewAction(e) {
+  const a = e.target.closest("[data-approve]");
+  const d = e.target.closest("[data-rdelete]");
+
+  if (!a && !d) return;
+
+  if (d && !confirm("Delete this review?")) return;
+
+  try {
+    const result = a
+      ? await db.from("reviews").update({ approved: true }).eq("id", Number(a.dataset.approve))
+      : await db.from("reviews").delete().eq("id", Number(d.dataset.rdelete));
+
+    if (result.error) throw result.error;
+
+    await loadAdminData();
+  } catch (err) {
+    message("vaMessage", err.message || "Review action failed.", true);
+  }
+}
+
+// =====================================
+// ADMIN LOGIN
+// =====================================
+
+function loginDialog() {
+  $("adminEmail").value = ADMIN_EMAIL;
+  $("loginMessage").textContent = "";
+  $("adminDialog").showModal();
+}
+
+$("adminEntry").addEventListener("click", loginDialog);
+
+$("closeAdminDialog").addEventListener("click", () => {
+  $("adminDialog").close();
+});
+
+$("adminDialog").addEventListener("click", e => {
+  if (e.target === $("adminDialog")) $("adminDialog").close();
+});
+
+$("adminLoginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+
+  const email = $("adminEmail").value.trim().toLowerCase();
+  const password = $("adminPassword").value;
+
+  if (email !== ADMIN_EMAIL) {
+    message("loginMessage", "This email is not authorized.", true);
+    return;
+  }
+
+  const btn = e.currentTarget.querySelector('[type="submit"]');
+  if (btn) btn.disabled = true;
+
+  message("loginMessage", "Signing in…");
+
+  try {
+    const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+    if (error) throw error;
+
+    if (data.user?.email?.toLowerCase() !== ADMIN_EMAIL) {
+      throw Error("Unauthorized account.");
+    }
+
+    $("adminDialog").close();
+    $("adminPassword").value = "";
+
+    buildAdmin();
+    $("adminSection").hidden = false;
+    $("adminSection").scrollIntoView({ behavior: "smooth" });
+
+    await loadAdminData();
+  } catch (err) {
+    message("loginMessage", err.message || "Login failed.", true);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 });
 
-document.getElementById("refreshOrders").addEventListener("click", loadOrders);
-document.getElementById("adminLogout").addEventListener("click", async () => {
-  await supabase.auth.signOut();
-  adminSection.hidden = true;
-  adminOrders.innerHTML = "";
-  adminMessage.textContent = "";
-});
+// =====================================
+// INITIALIZE WEBSITE
+// =====================================
 
-renderProducts();
-updateCart();
+(async () => {
+  trackEvent("page_view");
+
+  await loadProducts();
+
+  const { data, error } = await db.auth.getSession();
+
+  if (error) {
+    console.warn("Could not restore admin session:", error.message);
+    return;
+  }
+
+  if (data.session?.user?.email?.toLowerCase() === ADMIN_EMAIL) {
+    buildAdmin();
+    $("adminSection").hidden = false;
+    await loadAdminData();
+  }
+})();
+
 })();
