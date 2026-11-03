@@ -1,0 +1,201 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Discover quality products at great prices.">
+  <title>VÉRRO — Premium Online Store</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+  <!-- Announcement -->
+  <div class="announcement">
+    Welcome to VÉRRO — Discover something exceptional.
+  </div>
+
+  <!-- Header -->
+  <header class="header">
+    <a href="#" class="logo">VÉRRO<span>.</span></a>
+
+    <nav class="navigation">
+      <a href="#home">Home</a>
+      <a href="#products">Shop</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <div class="header-actions">
+      <button class="icon-button" id="searchButton" aria-label="Search">⌕</button>
+      <button class="icon-button cart-button" id="cartButton" aria-label="Shopping cart">
+        Bag <span id="cartCount">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Search -->
+  <div class="search-area" id="searchArea">
+    <input type="search" id="searchInput" placeholder="Search products...">
+  </div>
+
+  <!-- Hero -->
+  <main>
+    <section class="hero" id="home">
+      <div class="hero-content">
+        <p class="eyebrow">THE ART OF BETTER CHOICES</p>
+        <h1>Discover a world<br>of <span>possibilities.</span></h1>
+        <p class="hero-description">
+          Explore thoughtfully selected products designed
+          to make everyday life better.
+        </p>
+        <a href="#products" class="primary-button">Explore Collection ↗</a>
+      </div>
+
+      <div class="hero-visual">
+        <div class="hero-placeholder">
+          <span>YOUR NEXT<br>FAVOURITE<br>THING.</span>
+          <small>VÉRRO COLLECTION</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Benefits -->
+    <section class="benefits">
+      <div><strong>01</strong><span>Quality Products</span></div>
+      <div><strong>02</strong><span>Secure Shopping</span></div>
+      <div><strong>03</strong><span>Nationwide Delivery</span></div>
+    </section>
+
+    <!-- Products -->
+    <section class="products-section" id="products">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">OUR COLLECTION</p>
+          <h2>Explore products.</h2>
+        </div>
+        <p>Find something worth keeping.</p>
+      </div>
+
+      <div class="category-list" id="categoryList">
+        <button class="category active" data-category="All">All products</button>
+        <button class="category" data-category="Lifestyle">Lifestyle</button>
+        <button class="category" data-category="Technology">Technology</button>
+        <button class="category" data-category="Fashion">Fashion</button>
+        <button class="category" data-category="Other">Other</button>
+      </div>
+
+      <div class="product-grid" id="productGrid">
+        <div class="loading-message">Loading products...</div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="about-section" id="about">
+      <p class="eyebrow">OUR PHILOSOPHY</p>
+      <h2>Less ordinary.<br>More meaningful.</h2>
+      <p>
+        We believe shopping should be simple, thoughtful
+        and enjoyable. Discover products that matter to you.
+      </p>
+    </section>
+
+    <!-- Newsletter -->
+    <section class="newsletter" id="contact">
+      <div>
+        <p class="eyebrow">STAY CONNECTED</p>
+        <h2>Something good is coming.</h2>
+        <p>Keep an eye on our latest collections and updates.</p>
+      </div>
+      <a href="mailto:hello@verro.store" class="primary-button">Contact Us ↗</a>
+    </section>
+  </main>
+
+  <!-- Cart Drawer -->
+  <div class="overlay" id="cartOverlay"></div>
+
+  <aside class="cart-drawer" id="cartDrawer">
+    <div class="cart-header">
+      <h2>Your Bag</h2>
+      <button id="closeCart" aria-label="Close cart">✕</button>
+    </div>
+
+    <div class="cart-items" id="cartItems">
+      <p>Your shopping bag is empty.</p>
+    </div>
+
+    <div class="cart-footer">
+      <div class="cart-total">
+        <span>Subtotal</span>
+        <strong id="cartTotal">৳0</strong>
+      </div>
+      <form id="checkoutForm" class="checkout-form">
+        <label>
+          Full name
+          <input name="customerName" type="text" autocomplete="name" required maxlength="100">
+        </label>
+        <label>
+          Phone number
+          <input name="phone" type="tel" autocomplete="tel" required maxlength="20" placeholder="01XXXXXXXXX">
+        </label>
+        <label>
+          Delivery address
+          <textarea name="address" autocomplete="street-address" required maxlength="500" rows="2"></textarea>
+        </label>
+        <p class="payment-note">Payment method: Cash on Delivery</p>
+        <button class="primary-button checkout-button" id="checkoutButton" type="submit">
+          Place COD Order
+        </button>
+        <p id="checkoutMessage" class="form-message" role="status" aria-live="polite"></p>
+        <a id="whatsappNotice" class="secondary-button whatsapp-notice" href="#" target="_blank" rel="noopener" hidden>Send order details to WhatsApp</a>
+        <small>Shipping charges, if any, will be confirmed with you.</small>
+      </form>
+    </div>
+  </aside>
+
+  <!-- Admin dashboard -->
+  <section class="admin-section" id="adminSection" hidden>
+    <div class="admin-heading">
+      <div>
+        <p class="eyebrow">PRIVATE AREA</p>
+        <h2>Order dashboard</h2>
+      </div>
+      <div class="admin-actions">
+        <button class="secondary-button" id="refreshOrders" type="button">Refresh orders</button>
+        <button class="secondary-button" id="adminLogout" type="button">Sign out</button>
+      </div>
+    </div>
+    <p id="adminMessage" class="form-message" role="status" aria-live="polite"></p>
+    <div class="admin-orders" id="adminOrders"></div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <a href="#" class="logo">VÉRRO<span>.</span></a>
+    <p>© 2026 VÉRRO. All rights reserved.</p>
+    <p>Designed for better everyday shopping.</p>
+    <button class="admin-entry" id="adminEntry" type="button">Admin</button>
+  </footer>
+
+  <dialog class="admin-dialog" id="adminDialog">
+    <form id="adminLoginForm" class="admin-login-form">
+      <button class="dialog-close" id="closeAdminDialog" type="button" aria-label="Close">×</button>
+      <p class="eyebrow">ADMIN ACCESS</p>
+      <h2>Sign in</h2>
+      <label>Email<input id="adminEmail" type="email" autocomplete="username" required></label>
+      <label>Password<input id="adminPassword" type="password" autocomplete="current-password" required></label>
+      <p id="loginMessage" class="form-message" role="status" aria-live="polite"></p>
+      <button class="primary-button" type="submit">Sign in to orders</button>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
+</body>
+</html>
